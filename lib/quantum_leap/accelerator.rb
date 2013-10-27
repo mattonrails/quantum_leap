@@ -1,4 +1,5 @@
 require 'quantum_leap'
+require 'redis'
 
 module QuantumLeap
   # Internal: The main module for methods that manipulate time, and provide
@@ -26,6 +27,9 @@ module QuantumLeap
   module Accelerator
     extend self
 
+    attr_accessor :redis
+    attr_accessor :redis_var
+
     # Internal: Return or initialize the stack of time offsets as Floats.
     #
     # Examples
@@ -35,7 +39,14 @@ module QuantumLeap
     #
     # Returns an empty Array or an Array of Floats.
     def time_travel_offsets
-      @time_travel_offsets ||= []
+
+      if redis.nil?
+        @time_travel_offsets ||= []
+      else
+        @time_travel_offsets = redis.lrange(redis_var, 0, -1).map {|el| el.to_i}
+      end
+
+      @time_travel_offsets
     end
 
     # Internal: Empties the stack of time offsets, effectively resetting the
@@ -43,6 +54,9 @@ module QuantumLeap
     #
     # Returns an empty Array.
     def reset
+      unless redis.nil?
+        redis.ltrim(redis_var, 1, 0)
+      end
       @time_travel_offsets = []
     end
 
@@ -58,7 +72,11 @@ module QuantumLeap
     #
     # Returns the stack of time offsets, an Array of Floats.
     def mock_current_time(new_time)
-      time_travel_offsets.push(Time.now - new_time)
+      unless redis.nil?
+        redis.rpush(redis_var, Time.now - new_time)
+      else
+        time_travel_offsets.push(Time.now - new_time)
+      end
     end
 
     # Internal: Provide the mocked time by applying all offsets to the actual
